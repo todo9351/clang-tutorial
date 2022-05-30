@@ -49,7 +49,7 @@ struct car {
 struct car saturn = {"Saturn SL/2", 16000.99, 175};
 ```
 
-上面示例中，变量`saturn`是`struct cat`类型，大括号里面同时对它的三个属性赋值。如果大括号里面的值的数量，少于属性的数量，那么缺失的属性自动初始化为`0`。
+上面示例中，变量`saturn`是`struct car`类型，大括号里面同时对它的三个属性赋值。如果大括号里面的值的数量，少于属性的数量，那么缺失的属性自动初始化为`0`。
 
 注意，大括号里面的值的顺序，必须与 struct 类型声明时属性的顺序一致。否则，必须为每个值指定属性名。
 
@@ -147,14 +147,47 @@ numbers[0].denominator = 7;
 
 上面示例声明了一个有1000个成员的数组`numbers`，每个成员都是自定义类型`fraction`的实例。
 
-struct 结构占用的存储空间，不是各个属性存储空间的总和。因为为了计算效率，C 语言的内存占用空间一般来说，都必须是`int`类型存储空间的倍数。如果`int`类型的存储是4字节，那么 struct 类型的存储空间就总是4的倍数。
+struct 结构占用的存储空间，不是各个属性存储空间的总和，而是最大内存占用属性的存储空间的倍数，其他属性会添加空位与之对齐。这样可以提高读写效率。
 
 ```c
-struct { char a; int b; } s;
-printf("%d\n", sizeof(s)); // 8
+struct foo {
+  int a;
+  char* b;
+  char c;
+};
+printf("%d\n", sizeof(struct foo)); // 24
 ```
 
-上面示例中，如果按照属性占据的空间相加，变量`s`的存储空间应该是5个字节。但是，struct 结构的存储空间是`int`类型的倍数，所以最后的结果是占据8个字节，`a`属性与`b`属性之间有3个字节的“空洞”。
+上面示例中，`struct foo`有三个属性，在64位计算机上占用的存储空间分别是：`int a`占4个字节，指针`char* b`占8个字节，`char c`占1个字节。它们加起来，一共是13个字节（4 + 8 + 1）。但是实际上，`struct foo`会占用24个字节，原因是它最大的内存占用属性是`char* b`的8个字节，导致其他属性的存储空间也是8个字节，这样才可以对齐，导致整个`struct foo`就是24个字节（8 * 3）。
+
+多出来的存储空间，都采用空位填充，所以上面的`struct
+foo`真实的结构其实是下面这样。
+
+```c
+struct foo {
+  int a;        // 4
+  char pad1[4]; // 填充4字节
+  char *b;      // 8
+  char c;       // 1
+  char pad2[7]; // 填充7字节
+};
+printf("%d\n", sizeof(struct foo)); // 24
+```
+
+为什么浪费这么多空间进行内存对齐呢？这是为了加快读写速度，把内存占用划分成等长的区块，就可以快速在 Struct 结构体中定位到每个属性的起始地址。
+
+由于这个特性，在有必要的情况下，定义 Struct 结构体时，可以采用存储空间递增的顺序，定义每个属性，这样就能节省一些空间。
+
+```c
+struct foo {
+  char c;
+  int a;
+  char* b;
+};
+printf("%d\n", sizeof(struct foo)); // 16
+```
+
+上面示例中，占用空间最小的`char c`排在第一位，其次是`int a`，占用空间最大的`char* b`排在最后。整个`strct foo`的内存占用就从24字节下降到16字节。
 
 ## struct 的复制
 
@@ -378,7 +411,7 @@ for (struct node *cur = head; cur != NULL; cur = cur->next) {
 struct 还可以用来定义二进制位组成的数据结构，称为“位字段”（bit field），这对于操作底层的二进制数据非常有用。
 
 ```c
-typedef struct {
+struct {
   unsigned int ab:1;
   unsigned int cd:1;
   unsigned int ef:1;
